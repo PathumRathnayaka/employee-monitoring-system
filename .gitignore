@@ -1,0 +1,56 @@
+# ------------------------
+# Python & Flask
+# ------------------------
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# python egg files
+*.egg-info/
+.eggs/
+
+# pip
+pip-wheel-metadata/
+
+# Flask
+instance/
+*.log
+
+# ------------------------
+# AI Engine
+# ------------------------
+ai-engine/logs/
+ai-engine/yolo/*.pt
+ai-engine/yolo/*.onnx
+
+# ------------------------
+# Data folders
+# ------------------------
+data/events/
+data/summaries/
+data/screenshots/
+
+# ------------------------
+# Environment files
+# ------------------------
+.env
+.env.*
+
+# ------------------------
+# IDE / Editor
+# ------------------------
+.idea/
+.vscode/
+*.iml
+
+# ------------------------
+# OS files
+# ------------------------
+.DS_Store
+Thumbs.db
