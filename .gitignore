@@ -11,14 +11,14 @@ __pycache__/
 venv/
 env/
 
-# python egg files
+# Python egg files
 *.egg-info/
 .eggs/
 
 # pip
 pip-wheel-metadata/
 
-# Flask
+# Flask instance
 instance/
 *.log
 
@@ -50,7 +50,23 @@ data/screenshots/
 *.iml
 
 # ------------------------
-# OS files
+# OS Files
 # ------------------------
 .DS_Store
 Thumbs.db
+
+# ----------------------------------------------------
+# React Dashboard (Vite + Node)
+# ----------------------------------------------------
+dashboard/node_modules/
+dashboard/dist/
+dashboard/.vite/
+dashboard/.eslintcache
+dashboard/.npm/
+dashboard/.pnpm-store/
+dashboard/.yarn/
+dashboard/.parcel-cache/
+
+# Ignore vite env files
+dashboard/.env
+dashboard/.env.*
