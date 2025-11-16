@@ -1,10 +1,5 @@
-import json
-import os
 from datetime import datetime
-
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-
-EVENT_LOG_PATH = os.path.join(BASE_DIR, "data", "events")
+from backend.database import events_collection
 
 class EventLogger:
     def __init__(self, employee_id="001"):
@@ -16,49 +11,24 @@ class EventLogger:
         }
 
     def _write_event(self, event_type, status):
-        """
-        event_type: sleep / phone / away
-        status: start/end
-        """
-        today = datetime.now().strftime("%Y-%m-%d")
-        filepath = f"{EVENT_LOG_PATH}/{today}_{self.employee_id}.json"
-
-        # Ensure folder exists
-        os.makedirs(EVENT_LOG_PATH, exist_ok=True)
-
-        # If file does not exist, create empty list
-        if not os.path.exists(filepath):
-            with open(filepath, "w") as f:
-                json.dump([], f)
-
-        # Load existing events
-        with open(filepath, "r") as f:
-            events = json.load(f)
-
         event = {
+            "employee_id": self.employee_id,
             "event_type": event_type,
             "status": status,
-            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            "timestamp": datetime.now()
         }
 
-        events.append(event)
+        events_collection.insert_one(event)
 
-        # Save updated file
-        with open(filepath, "w") as f:
-            json.dump(events, f, indent=4)
-
-        print(f"[EVENT] {event_type} - {status}")
+        print(f"[EVENT → DB] {event_type} - {status}")
 
     def handle_event(self, event_type, active):
-        previous_state = self.current_events[event_type]
+        prev = self.current_events[event_type]
 
-        if active and not previous_state:
-            # Event started
+        if active and not prev:
             self._write_event(event_type, "start")
 
-        elif not active and previous_state:
-            # Event ended
+        elif not active and prev:
             self._write_event(event_type, "end")
 
-        # Update state
         self.current_events[event_type] = active
