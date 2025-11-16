@@ -1,9 +1,12 @@
 import cv2
 from ultralytics import YOLO
 
-from logic.sleep_detector import SleepDetector          # Eye-based sleep detection
-from logic.sleep_pose_detector import SleepPoseDetector  # Head-down sleep detection
-from logic.phone_detector import PhoneDetector           # Phone usage detection
+from logic.sleep_detector import SleepDetector
+from logic.sleep_pose_detector import SleepPoseDetector
+from logic.phone_detector import PhoneDetector
+from logic.away_detector import AwayDetector
+
+from backend.services.event_logger import EventLogger
 
 
 # Load YOLO model (COCO pretrained)
@@ -19,6 +22,10 @@ def start_detection():
 
     sleep_pose_detector = SleepPoseDetector()
     phone_detector = PhoneDetector()
+    away_detector = AwayDetector()
+
+    # Event logger
+    logger = EventLogger(employee_id="001")
 
     if not cap.isOpened():
         print("❌ Error: Cannot open webcam")
@@ -32,23 +39,26 @@ def start_detection():
             break
 
         # -----------------------------
-        # Sleep Detection Logic
+        # Sleep Detection
         # -----------------------------
-        is_sleeping_eye = sleep_detector.detect(frame)        # eyes closed detection
-        is_sleeping_pose = sleep_pose_detector.detect(frame)  # head down detection
+        is_sleeping_eye = sleep_detector.detect(frame)
+        is_sleeping_pose = sleep_pose_detector.detect(frame)
+        is_sleeping = is_sleeping_eye or is_sleeping_pose
 
-        if is_sleeping_eye or is_sleeping_pose:
+        if is_sleeping:
             cv2.putText(frame, "SLEEPING!", (50, 50),
                         cv2.FONT_HERSHEY_SIMPLEX, 1.2,
                         (0, 0, 255), 3)
+
+        # Log sleep event
+        logger.handle_event("sleep", is_sleeping)
 
         # -----------------------------
         # YOLO Object Detection
         # -----------------------------
         results = model(frame, stream=True)
-
-        # Collect YOLO boxes for phone detection
         all_boxes = []
+
         for r in results:
             for box in r.boxes:
                 all_boxes.append(box)
@@ -63,26 +73,49 @@ def start_detection():
                         cv2.FONT_HERSHEY_SIMPLEX, 1.2,
                         (0, 255, 255), 3)
 
+        # Log phone event
+        logger.handle_event("phone", is_phone_using)
+
         # -----------------------------
-        # Draw YOLO Bounding Boxes
+        # Away-from-desk Detection
+        # -----------------------------
+        person_present = any(
+            model.names[int(box.cls[0])] == "person"
+            for box in all_boxes
+        )
+
+        is_away = away_detector.update(person_present)
+
+        if is_away:
+            cv2.putText(frame, "AWAY FROM DESK!", (50, 150),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1.2,
+                        (255, 0, 0), 3)
+
+        # Log away event
+        logger.handle_event("away", is_away)
+
+        # -----------------------------
+        # Draw YOLO bounding boxes
         # -----------------------------
         for r in results:
             for box in r.boxes:
                 cls = int(box.cls[0])
                 conf = float(box.conf[0])
                 x1, y1, x2, y2 = map(int, box.xyxy[0])
-
                 label = model.names[cls]
-                color = (0, 255, 0)
 
-                # Draw box
+                color = (0, 255, 0)  # Keep green YOLO boxes
+
                 cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-
-                # Draw label
-                cv2.putText(frame, f"{label} {conf:.2f}",
-                            (x1, y1 - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            0.6, color, 2)
+                cv2.putText(
+                    frame,
+                    f"{label} {conf:.2f}",
+                    (x1, y1 - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6,
+                    color,
+                    2
+                )
 
         # -----------------------------
         # Display Window
