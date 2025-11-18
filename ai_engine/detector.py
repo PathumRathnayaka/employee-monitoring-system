@@ -3,25 +3,24 @@ from ultralytics import YOLO
 import threading
 import time
 
-from logic.sleep_detector import SleepDetector
-from logic.sleep_pose_detector import SleepPoseDetector
-from logic.phone_detector import PhoneDetector
-from logic.away_detector import AwayDetector
+from ai_engine.logic.sleep_detector import SleepDetector
+from ai_engine.logic.sleep_pose_detector import SleepPoseDetector
+from ai_engine.logic.phone_detector import PhoneDetector
+from ai_engine.logic.away_detector import AwayDetector
 
 from backend.services.event_logger import EventLogger
 
 # Load YOLO model (COCO pretrained)
 model = YOLO("yolov8n.pt")
 
-# Global flag to control detection
-detection_running = False
-detection_thread = None
-
 
 class DetectionRunner:
-    def __init__(self):
+    def __init__(self, show_preview=True):  # Changed default to True
         self.running = False
         self.cap = None
+        self.show_preview = show_preview
+        self.frame_count = 0
+        self.current_alerts = []  # Store active alerts
 
     def start(self):
         """Start detection in a separate thread"""
@@ -51,6 +50,8 @@ class DetectionRunner:
         print("🔵 AI Engine Started")
         print("📹 Webcam: Active")
         print("🔌 SocketIO: Ready to emit events")
+        if self.show_preview:
+            print("🎥 Preview mode: Window will open")
         print("=" * 60)
 
     def process_frame(self):
@@ -61,6 +62,8 @@ class DetectionRunner:
         ret, frame = self.cap.read()
         if not ret:
             return None
+
+        self.frame_count += 1
 
         # Sleep Detection
         is_sleeping_eye = self.sleep_detector.detect(frame)
@@ -131,6 +134,11 @@ class DetectionRunner:
                     2
                 )
 
+        # Add status overlay
+        status_text = f"Frame: {self.frame_count} | Sleep: {is_sleeping} | Phone: {is_phone_using} | Away: {is_away}"
+        cv2.putText(frame, status_text, (10, frame.shape[0] - 20),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+
         return frame
 
     def run_loop(self):
@@ -149,11 +157,15 @@ class DetectionRunner:
 
     def run_headless(self):
         """Run without display window (for server mode)"""
-        while self.running:
-            frame = self.process_frame()
-            if frame is None:
-                break
-            time.sleep(0.033)  # ~30 FPS
+        if self.show_preview:
+            # Show preview window even in headless mode
+            self.run_loop()
+        else:
+            while self.running:
+                frame = self.process_frame()
+                if frame is None:
+                    break
+                time.sleep(0.033)  # ~30 FPS
 
     def stop(self):
         """Stop detection"""
@@ -165,11 +177,13 @@ class DetectionRunner:
 
 
 # Global detector instance
-detector = DetectionRunner()
+detector = DetectionRunner(show_preview=False)
 
 
-def start_detection_headless():
+def start_detection_headless(show_preview=False):
     """Start detection without GUI (for Flask integration)"""
+    global detector
+    detector = DetectionRunner(show_preview=show_preview)
     detector.start()
     thread = threading.Thread(target=detector.run_headless, daemon=True)
     thread.start()
@@ -178,6 +192,7 @@ def start_detection_headless():
 
 def start_detection_windowed():
     """Start detection with GUI window"""
+    detector = DetectionRunner(show_preview=True)
     detector.start()
     detector.run_loop()
 

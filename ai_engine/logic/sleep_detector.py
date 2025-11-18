@@ -43,12 +43,12 @@ class SleepDetector:
 
         results = self.face.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
-        # Debug: detect face or not
+        # If no face detected, return False (not sleeping)
         if not results.multi_face_landmarks:
-            print("No face detected")
+            # Reset sleeping state if no face detected
+            self.sleeping = False
+            self.sleep_start = None
             return False
-        else:
-            print("Face detected")
 
         for face in results.multi_face_landmarks:
 
@@ -60,9 +60,6 @@ class SleepDetector:
             right_ear = eye_aspect_ratio(landmarks, RIGHT_EYE)
             ear = (left_ear + right_ear) / 2
 
-            # Debug: print EAR values
-            print("EAR:", ear)
-
             # Eyes closed?
             if ear < self.threshold:
                 if not self.sleeping:
@@ -73,7 +70,7 @@ class SleepDetector:
                 self.sleep_start = None
 
             # Sleeping for required time
-            if self.sleeping and time.time() - self.sleep_start >= self.min_sleep_time:
+            if self.sleeping and self.sleep_start and time.time() - self.sleep_start >= self.min_sleep_time:
                 return True
 
         return False
