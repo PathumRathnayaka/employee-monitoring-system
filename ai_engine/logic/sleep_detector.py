@@ -25,52 +25,89 @@ class SleepDetector:
     def __init__(self):
         self.sleep_start = None
         self.sleeping = False
-        self.threshold = 0.35  # EAR threshold (can adjust later)
-        self.min_sleep_time = 2  # seconds required to count as sleeping
-        self.face = None  # Face mesh will be initialized in setup()
+
+        # Improved thresholds for better accuracy
+        self.threshold = 0.25  # Lower = more sensitive (was 0.35)
+        self.min_sleep_time = 3  # Require 3 seconds (was 2)
+
+        # Blink detection to avoid false positives
+        self.blink_threshold = 0.15  # Very low EAR = blink
+        self.last_blink_time = 0
+        self.blink_cooldown = 0.5  # Ignore detections 0.5s after blink
+
+        # Confirmation buffer
+        self.closed_eye_buffer = []
+        self.buffer_size = 10  # Need 10 consecutive frames
+
+        self.face = None
 
     def setup(self):
-        # More sensitive detection settings for low-light or low-quality webcams
+        """Initialize face mesh with optimized settings"""
         self.face = mp_face_mesh.FaceMesh(
             max_num_faces=1,
             refine_landmarks=True,
-            min_detection_confidence=0.3,
-            min_tracking_confidence=0.3
+            min_detection_confidence=0.5,  # Higher confidence
+            min_tracking_confidence=0.5
         )
 
     def detect(self, frame):
+        """Detect sleeping with improved accuracy"""
         h, w = frame.shape[:2]
 
         results = self.face.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
 
-        # If no face detected, return False (not sleeping)
+        # If no face detected, reset state
         if not results.multi_face_landmarks:
-            # Reset sleeping state if no face detected
             self.sleeping = False
             self.sleep_start = None
+            self.closed_eye_buffer.clear()
             return False
 
         for face in results.multi_face_landmarks:
-
             # Convert landmarks to pixel locations
             landmarks = [(int(l.x * w), int(l.y * h)) for l in face.landmark]
 
-            # EAR calculation for both eyes
+            # Calculate EAR for both eyes
             left_ear = eye_aspect_ratio(landmarks, LEFT_EYE)
             right_ear = eye_aspect_ratio(landmarks, RIGHT_EYE)
             ear = (left_ear + right_ear) / 2
 
-            # Eyes closed?
-            if ear < self.threshold:
-                if not self.sleeping:
-                    self.sleep_start = time.time()
-                    self.sleeping = True
-            else:
-                self.sleeping = False
-                self.sleep_start = None
+            current_time = time.time()
 
-            # Sleeping for required time
-            if self.sleeping and self.sleep_start and time.time() - self.sleep_start >= self.min_sleep_time:
-                return True
+            # Detect blink (very quick eye closure)
+            if ear < self.blink_threshold:
+                self.last_blink_time = current_time
+                self.closed_eye_buffer.clear()
+                return False
+
+            # Ignore detections shortly after blink
+            if current_time - self.last_blink_time < self.blink_cooldown:
+                return False
+
+            # Eyes closed check with buffer
+            eyes_closed = ear < self.threshold
+
+            # Add to buffer
+            self.closed_eye_buffer.append(eyes_closed)
+            if len(self.closed_eye_buffer) > self.buffer_size:
+                self.closed_eye_buffer.pop(0)
+
+            # Need consistent closed eyes
+            if len(self.closed_eye_buffer) >= self.buffer_size:
+                confirmed_closed = sum(self.closed_eye_buffer) >= (self.buffer_size * 0.8)
+
+                if confirmed_closed:
+                    if not self.sleeping:
+                        self.sleep_start = current_time
+                        self.sleeping = True
+                else:
+                    self.sleeping = False
+                    self.sleep_start = None
+
+            # Require sustained sleeping
+            if self.sleeping and self.sleep_start:
+                sleep_duration = current_time - self.sleep_start
+                if sleep_duration >= self.min_sleep_time:
+                    return True
 
         return False

@@ -24,11 +24,14 @@ const LiveStatusCard = () => {
     };
 
     fetchInitialStatus();
+
+    // Refresh every 5 seconds even without socket
+    const interval = setInterval(fetchInitialStatus, 5000);
+    return () => clearInterval(interval);
   }, []);
 
-  // Real-time updates
+  // Socket updates (batch mode - every 5 seconds)
   useEffect(() => {
-    // Connection event handlers
     const handleConnect = () => {
       console.log("✅ Socket connected!");
       setConnected(true);
@@ -44,24 +47,25 @@ const LiveStatusCard = () => {
       setConnected(false);
     };
 
-    // Status update handler
-    const handleStatusUpdate = (data: any) => {
-      console.log("📡 SOCKET RECEIVED:", data);
+    // Batch status update handler (receives all states at once)
+    const handleBatchUpdate = (data: any) => {
+      console.log("📦 BATCH UPDATE RECEIVED:", data);
       const timestamp = new Date(data.timestamp).toLocaleTimeString();
 
-      setStatus((prev) => ({
-        ...prev,
-        [data.event_type]: data.active,
-      }));
+      setStatus({
+        sleep: data.sleep,
+        phone: data.phone,
+        away: data.away,
+      });
 
-      setLastUpdate(`${data.event_type.toUpperCase()}: ${data.active ? "ACTIVE" : "INACTIVE"} at ${timestamp}`);
+      setLastUpdate(`Updated at ${timestamp}`);
     };
 
     // Register event listeners
     socket.on("connect", handleConnect);
     socket.on("disconnect", handleDisconnect);
     socket.on("connect_error", handleConnectError);
-    socket.on("status_update", handleStatusUpdate);
+    socket.on("status_batch_update", handleBatchUpdate);
 
     // Check if already connected
     if (socket.connected) {
@@ -73,7 +77,7 @@ const LiveStatusCard = () => {
       socket.off("connect", handleConnect);
       socket.off("disconnect", handleDisconnect);
       socket.off("connect_error", handleConnectError);
-      socket.off("status_update", handleStatusUpdate);
+      socket.off("status_batch_update", handleBatchUpdate);
     };
   }, []);
 
@@ -85,14 +89,28 @@ const LiveStatusCard = () => {
     return isActive ? "🔴" : "🟢";
   };
 
+  const getStatusEmoji = (type: string, isActive: boolean) => {
+    if (!isActive) return "✅";
+
+    switch(type) {
+      case "sleep": return "😴";
+      case "phone": return "📱";
+      case "away": return "🚶";
+      default: return "⚠️";
+    }
+  };
+
   return (
     <div className="card live-status" style={{
       padding: "20px",
       borderRadius: "10px",
       backgroundColor: "#1a1a1a",
-      minWidth: "300px"
+      minWidth: "350px",
+      border: "2px solid #333"
     }}>
-      <h2>🔴 Live Status</h2>
+      <h2 style={{ marginBottom: "20px" }}>
+        📊 Live Status Monitor
+      </h2>
 
       <div style={{
         padding: "10px",
@@ -100,60 +118,121 @@ const LiveStatusCard = () => {
         backgroundColor: connected ? "#004400" : "#440000",
         borderRadius: "5px",
         fontSize: "14px",
-        fontWeight: "bold"
+        fontWeight: "bold",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center"
       }}>
-        {connected ? "🟢 Connected to Server" : "🔴 Disconnected from Server"}
+        <span>{connected ? "🟢 Connected" : "🔴 Disconnected"}</span>
+        <span style={{ fontSize: "12px", color: "#ccc" }}>
+          Updates every 5s
+        </span>
       </div>
 
       {lastUpdate && (
         <div style={{
           padding: "8px",
           marginBottom: "15px",
-          backgroundColor: "#333",
+          backgroundColor: "#222",
           borderRadius: "5px",
-          fontSize: "12px",
-          color: "#aaa"
+          fontSize: "11px",
+          color: "#999",
+          textAlign: "center"
         }}>
-          Last Update: {lastUpdate}
+          {lastUpdate}
         </div>
       )}
 
-      <div style={{ textAlign: "left", fontSize: "18px" }}>
-        <p style={{ padding: "10px 0" }}>
-          <span style={{ marginRight: "10px" }}>{getStatusIcon(status.sleep)}</span>
-          <strong>Sleeping:</strong>{" "}
-          <span style={{
-            color: getStatusColor(status.sleep),
-            fontWeight: "bold",
-            marginLeft: "10px"
-          }}>
-            {status.sleep ? "YES" : "No"}
-          </span>
-        </p>
+      <div style={{
+        textAlign: "left",
+        fontSize: "16px",
+        display: "flex",
+        flexDirection: "column",
+        gap: "15px"
+      }}>
+        <div style={{
+          padding: "15px",
+          borderRadius: "8px",
+          backgroundColor: status.sleep ? "#330000" : "#003300",
+          border: `2px solid ${getStatusColor(status.sleep)}`,
+          transition: "all 0.3s ease"
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <span style={{ fontSize: "24px", marginRight: "10px" }}>
+                {getStatusEmoji("sleep", status.sleep)}
+              </span>
+              <strong>Sleeping</strong>
+            </div>
+            <span style={{
+              color: getStatusColor(status.sleep),
+              fontWeight: "bold",
+              fontSize: "18px"
+            }}>
+              {status.sleep ? "YES" : "No"}
+            </span>
+          </div>
+        </div>
 
-        <p style={{ padding: "10px 0" }}>
-          <span style={{ marginRight: "10px" }}>{getStatusIcon(status.phone)}</span>
-          <strong>Phone Usage:</strong>{" "}
-          <span style={{
-            color: getStatusColor(status.phone),
-            fontWeight: "bold",
-            marginLeft: "10px"
-          }}>
-            {status.phone ? "YES" : "No"}
-          </span>
-        </p>
+        <div style={{
+          padding: "15px",
+          borderRadius: "8px",
+          backgroundColor: status.phone ? "#333300" : "#003300",
+          border: `2px solid ${getStatusColor(status.phone)}`,
+          transition: "all 0.3s ease"
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <span style={{ fontSize: "24px", marginRight: "10px" }}>
+                {getStatusEmoji("phone", status.phone)}
+              </span>
+              <strong>Phone Usage</strong>
+            </div>
+            <span style={{
+              color: getStatusColor(status.phone),
+              fontWeight: "bold",
+              fontSize: "18px"
+            }}>
+              {status.phone ? "YES" : "No"}
+            </span>
+          </div>
+        </div>
 
-        <p style={{ padding: "10px 0" }}>
-          <span style={{ marginRight: "10px" }}>{getStatusIcon(status.away)}</span>
-          <strong>Away from Desk:</strong>{" "}
-          <span style={{
-            color: getStatusColor(status.away),
-            fontWeight: "bold",
-            marginLeft: "10px"
-          }}>
-            {status.away ? "YES" : "No"}
-          </span>
-        </p>
+        <div style={{
+          padding: "15px",
+          borderRadius: "8px",
+          backgroundColor: status.away ? "#000033" : "#003300",
+          border: `2px solid ${getStatusColor(status.away)}`,
+          transition: "all 0.3s ease"
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <span style={{ fontSize: "24px", marginRight: "10px" }}>
+                {getStatusEmoji("away", status.away)}
+              </span>
+              <strong>Away from Desk</strong>
+            </div>
+            <span style={{
+              color: getStatusColor(status.away),
+              fontWeight: "bold",
+              fontSize: "18px"
+            }}>
+              {status.away ? "YES" : "No"}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div style={{
+        marginTop: "20px",
+        padding: "10px",
+        backgroundColor: "#111",
+        borderRadius: "5px",
+        fontSize: "12px",
+        color: "#666",
+        textAlign: "center"
+      }}>
+        High Accuracy Mode • Updates: Delayed
       </div>
     </div>
   );
