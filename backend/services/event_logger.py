@@ -1,6 +1,6 @@
 from datetime import datetime
 from backend.database import events_collection
-from backend.app import socketio  # import global socketio instance
+import backend.socket_instance as socket_instance
 
 
 class EventLogger:
@@ -14,14 +14,21 @@ class EventLogger:
         }
 
     def _emit_realtime(self, event_type, active):
-        print("[SOCKET EMIT]", event_type, active)  # debug log
-        socketio.emit("status_update", {
-            "event_type": event_type,
-            "active": active,
-            "timestamp": datetime.now().isoformat()
-        })
+        """Emit real-time status update via SocketIO"""
+        socketio = socket_instance.get_socketio()
+        if socketio:
+            data = {
+                "event_type": event_type,
+                "active": active,
+                "timestamp": datetime.now().isoformat()
+            }
+            print(f"[SOCKET EMIT] {data}")  # Debug log
+            socketio.emit("status_update", data)
+        else:
+            print("[WARNING] SocketIO not initialized!")
 
     def _write_event(self, event_type, status):
+        """Write event to database"""
         event = {
             "employee_id": self.employee_id,
             "event_type": event_type,
@@ -33,6 +40,7 @@ class EventLogger:
         print(f"[EVENT → DB] {event_type} - {status}")
 
     def handle_event(self, event_type, active):
+        """Handle state changes and emit/log events"""
         previous = self.current_events[event_type]
 
         # Only write when state changes
